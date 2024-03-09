@@ -15,7 +15,13 @@ func main() {
 		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
-		fx.Provide(NewHTTPServer, NewServeMux, NewEchoHandler, zap.NewExample),
+		fx.Provide(
+			NewHTTPServer,
+			NewServeMux,
+			fx.Annotate(
+				NewEchoHandler,
+				fx.As(new(Route))),
+			zap.NewExample),
 		fx.Invoke(func(server *http.Server) {}),
 	).Run()
 }
@@ -39,6 +45,12 @@ func NewHTTPServer(lc fx.Lifecycle, mux *http.ServeMux, log *zap.Logger) *http.S
 	return srv
 }
 
+type Route interface {
+	http.Handler
+
+	Pattern() string
+}
+
 type EchoHandler struct {
 	log *zap.Logger
 }
@@ -55,8 +67,12 @@ func (h *EchoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func NewServeMux(echo *EchoHandler) *http.ServeMux {
+func (*EchoHandler) Pattern() string {
+	return "/echo"
+}
+
+func NewServeMux(route Route) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/echo", echo)
+	mux.Handle(route.Pattern(), route)
 	return mux
 }
